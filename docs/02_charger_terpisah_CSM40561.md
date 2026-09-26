@@ -1,56 +1,92 @@
-# Tahap 2 - Arsitektur Charger Terpisah
+# Tahap 2 - Charger Terpisah CSM4056T / TP4056-style
 
 Tanggal update: 26 September 2026.
 
-## Keputusan desain
+## Identifikasi dari foto
 
-Charging baterai dipisahkan dari board powerbank bekas.
+Modul yang digunakan cocok dengan board charger USB Type-C 1S berbasis **CSM4056T / keluarga TP4056-style** yang memiliki rangkaian proteksi baterai.
 
-Blok sistem:
+Ciri yang terlihat:
+- USB Type-C.
+- Dua LED status.
+- Empat terminal baterai/output di sisi berlawanan USB.
+- Pad input alternatif `IN+` dan `IN-`.
+- Terminal `B+`, `B-`, `OUT+`, dan `OUT-`.
+
+## Pinout fisik
+
+Posisikan board:
+- USB-C di bawah.
+- Sisi komponen menghadap ke atas.
+
+Empat pad bagian atas dari kiri ke kanan:
 
 ```text
-5V INPUT
-   |
-   v
-CSM40561 charger module
-   |
-   v
-Battery pack 1S2P
-2 x 4600 mAh
-   |
-   +--> ESP32-C3 + OLED
-   |
-   +--> Board powerbank bekas / boost --> USB 5V output
++---------+---------+---------+---------+
+|  OUT+   |   B+    |   B-    |  OUT-   |
++---------+---------+---------+---------+
 ```
 
-## Kenapa dipisah?
+Di dekat USB-C:
+- USB-C = input 5V.
+- `IN+` / `IN-` = alternatif input 5V bila tidak memakai konektor USB-C.
 
-- Charging dan boost/output lebih mudah diuji terpisah.
-- Troubleshooting menjadi lebih sederhana.
-- ESP32 bisa membaca status sistem tanpa harus bergantung penuh pada board powerbank lama.
-- Board powerbank bekas dapat difokuskan sebagai bagian output/boost bila cocok.
+## Wiring ke baterai 1S2P
 
-## Catatan penting CSM40561
+```text
+Battery #1 (+) ---+
+                 +---- B+
+Battery #2 (+) ---+
 
-Nama **CSM40561** dicatat berdasarkan modul yang tersedia pada project. Keluarga IC bernomor 40561 tersedia dari beberapa produsen dan spesifikasinya tidak selalu identik.
+Battery #1 (-) ---+
+                 +---- B-
+Battery #2 (-) ---+
+```
 
-Sebelum penyambungan permanen, wajib verifikasi:
-1. Pin input + dan -.
-2. Pin battery + dan -.
-3. Tegangan input modul.
-4. Tegangan terminasi baterai (target pack Li-ion 1S umumnya 4.2 V).
-5. Arus charge modul.
-6. Apakah modul memiliki proteksi over-discharge/over-current atau hanya fungsi charger.
+Baterai project:
+- 2 x Li-ion 4600 mAh.
+- Paralel / 1S2P.
+- Total nominal sekitar 9200 mAh @ 3.7 V.
+- Tegangan pack terakhir sekitar 3.9 V.
 
-## Kondisi baterai project
+## Wiring ke board boost/powerbank lama
 
-- 2 x Li-ion 4600 mAh
-- Konfigurasi: paralel / 1S2P
-- Kapasitas nominal total: sekitar 9200 mAh
-- Tegangan pack yang sudah diukur: sekitar 3.9 V
+```text
+CSM4056T OUT+ ----> B+ / input positif board powerbank lama
+CSM4056T OUT- ----> B- / input negatif board powerbank lama
+```
 
-## Belum dilakukan
+Gunakan `OUT+` dan `OUT-`, bukan langsung `B+` dan `B-`, supaya jalur beban melewati proteksi baterai.
 
-Jangan sambungkan modul ke baterai hanya berdasarkan nama IC. Pinout PCB modul harus dilihat terlebih dahulu.
+## Input charging
 
-Tahap berikutnya adalah dokumentasi foto/pin modul CSM40561 dan pengukuran input/output dengan multimeter sebelum digabung ke sistem.
+Pakai charger USB 5V ke port USB-C.
+
+Jangan memberi input 9V/12V USB PD secara paksa ke pad input. Modul charger linear ini ditujukan untuk input sekitar 5V.
+
+## Pengujian sebelum assembly
+
+1. Pastikan polaritas baterai benar.
+2. Sambungkan pack ke B+ / B-.
+3. Ukur tegangan OUT+ terhadap OUT-.
+4. Masukkan 5V melalui USB-C.
+5. Pastikan LED charge menyala.
+6. Pantau suhu modul selama beberapa menit.
+7. Setelah mendekati penuh, tegangan baterai tidak boleh terus naik melewati kisaran 4.2V.
+8. Baru sambungkan board powerbank lama ke OUT+ / OUT-.
+
+## Catatan charge + load
+
+CSM4056T/TP4056 adalah linear charger dan bukan IC power-path/load-sharing. Beban besar yang tetap aktif saat charging dapat mengganggu terminasi charge dan membuat modul lebih panas.
+
+Untuk tahap awal project:
+- charge baterai dengan beban powerbank/ESP32 dimatikan atau minimal,
+- setelah sistem stabil baru kita evaluasi apakah perlu power-path terpisah.
+
+## Tahap selanjutnya
+
+Setelah charger lolos uji multimeter, lanjut:
+1. resistor divider untuk ADC,
+2. baca tegangan baterai,
+3. tampilkan voltage + percentage di OLED,
+4. deteksi status charging dari LED/status pin bila memungkinkan.
