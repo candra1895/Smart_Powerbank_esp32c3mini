@@ -81,3 +81,43 @@ Gunakan sketch:
 `firmware/02_battery_voltage/02b_adc_diagnostic.ino`
 
 untuk melihat RAW ADC dan millivolt sebelum memakai UI battery percentage.
+
+## 5. Baterai belum dipasang tetapi terbaca sekitar 4.1V / 87-90%
+
+Gejala:
+
+```text
+Battery: 4.091 V | 87%
+Battery: 4.108 V | 90%
+```
+
+Jika battery pack benar-benar belum terpasang, pembacaan ini biasanya berasal dari salah satu dari dua kondisi:
+
+1. **USB-C charger CSM4056T sedang diberi 5V.** Charger dapat menaikkan node BAT/OUT mendekati tegangan terminasi sekitar 4.2V walaupun tidak ada sel. ADC lalu mengira node tersebut adalah baterai penuh.
+2. **Node ADC/OUT mendapat tegangan dari jalur lain atau floating/coupling.** Ini harus dicek bila charger USB-C juga tidak terhubung.
+
+### Tes pembeda
+
+Lepas battery pack.
+
+A. Lepas juga input USB-C charger:
+- ukur OUT+ ke OUT-,
+- ukur titik tengah divider ke GND.
+
+Harapan:
+- OUT+ ke OUT- mendekati 0V,
+- titik tengah divider mendekati 0V.
+
+B. Colok USB-C 5V ke charger tanpa battery:
+- OUT/BAT dapat naik sekitar 4.0-4.2V pada charger linear jenis ini,
+- karena itu voltage-only detection tidak bisa membedakan "battery full" dan "battery absent while charger powered".
+
+### Implikasi firmware
+
+Threshold sederhana seperti "di bawah 2.8V = NO BATTERY" hanya bekerja ketika charger input tidak sedang memberi node BAT/OUT tegangan.
+
+Untuk deteksi battery-present yang benar saat charger juga terhubung, diperlukan sinyal tambahan, misalnya:
+- membaca status charger dan input charger,
+- atau rangkaian battery-presence/load-test khusus.
+
+Untuk tahap saat ini, jangan ubah kurva persentase. Verifikasi dulu apakah pembacaan 4.1V hanya muncul saat USB-C charger terhubung.
