@@ -121,3 +121,44 @@ Untuk deteksi battery-present yang benar saat charger juga terhubung, diperlukan
 - atau rangkaian battery-presence/load-test khusus.
 
 Untuk tahap saat ini, jangan ubah kurva persentase. Verifikasi dulu apakah pembacaan 4.1V hanya muncul saat USB-C charger terhubung.
+
+
+## 6. Battery terbaca sekitar 5.24V setelah baterai dipasang
+
+Contoh gejala:
+
+```text
+Battery: 5.244 V | 100% | IDLE
+```
+
+Pack project adalah Li-ion 1S, jadi battery asli tidak boleh berada di 5.24V. Nilai ini sangat mirip dengan **output boost 5V board powerbank**, terutama karena boost tanpa beban dapat berada sedikit di atas 5V.
+
+Kemungkinan utama: resistor divider/ADC dipasang ke output USB 5V setelah boost, bukan ke tegangan battery sebelum boost.
+
+### Titik sense yang benar
+
+```text
+Battery/CSM4056T OUT+ (sebelum boost)
+          |
+         10k
+          |
+          +------ GPIO4
+          |
+         10k
+          |
+CSM4056T OUT- ---- GND ESP32
+```
+
+ESP32 boleh tetap diberi daya dari output boost 5V, tetapi **GPIO4 harus mengukur jalur battery sebelum boost**.
+
+### Tes multimeter
+
+Ukur tiga titik:
+
+1. Battery B+ ke B-: sekitar 3.0-4.2V.
+2. CSM4056T OUT+ ke OUT-: normalnya hampir sama dengan tegangan battery.
+3. USB 5V board powerbank: sekitar 5V dan bisa sedikit lebih tinggi tanpa beban.
+
+Jika titik yang masuk ke R1 10k terbaca sekitar 5.2V, kabel sense berada di sisi yang salah.
+
+Firmware charging indicator sekarang juga menampilkan `CHECK BAT SENSE` jika pembacaan melebihi 4.35V agar nilai 5V tidak lagi ditampilkan sebagai 100%.
