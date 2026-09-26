@@ -6,46 +6,45 @@
 - OLED SCL: GPIO 6
 - Battery ADC: **GPIO 4 / ADC1_CH4**
 
-GPIO4 dipilih karena merupakan ADC1_CH4 pada ESP32-C3 dan tidak termasuk strapping pin GPIO2/GPIO8/GPIO9.
+## WAJIB: dua resistor untuk voltage divider
 
-## Penting: resistor divider
+Firmware menggunakan divider:
+- R1 = 10k ohm
+- R2 = 10k ohm
 
-Firmware tahap ini diasumsikan memakai:
+**Satu resistor 10k saja tidak menurunkan tegangan ADC.** Resistor tunggal hanya menjadi resistor seri karena input ADC sangat tinggi impedansinya.
 
-- R1 (atas): 10k ohm
-- R2 (bawah): 10k ohm
-
-Wiring:
+Wiring yang benar:
 
 ```text
-CSM4056T OUT+
-      |
-     10k   <- R1
-      |
-      +----------> GPIO4 ESP32-C3
-      |
-     10k   <- R2
-      |
-CSM4056T OUT- ----> GND ESP32-C3
+CSM4056T OUT+ / Battery+
+          |
+         10k  R1
+          |
+          +----------> GPIO4 ESP32-C3
+          |
+         10k  R2
+          |
+CSM4056T OUT- --------> GND ESP32-C3
 ```
 
 Dengan divider 1:1:
-- baterai 4.20 V menjadi sekitar 2.10 V di GPIO4
-- baterai 3.90 V menjadi sekitar 1.95 V di GPIO4
+- 4.20V -> sekitar 2.10V pada GPIO4
+- 3.90V -> sekitar 1.95V pada GPIO4
 
-**Jangan sambungkan 4.2 V baterai langsung ke GPIO ESP32-C3.**
+### Sebelum GPIO4 disambungkan
 
-Jika saat ini hanya tersedia satu resistor 10k dan satu 1M, jangan gunakan kombinasi itu untuk versi ini. Tambahkan satu resistor 10k lagi atau pasangan resistor bernilai sama.
+Ukur dengan multimeter terlebih dahulu:
+1. OUT+ terhadap OUT- harus sesuai tegangan pack, misalnya ~3.9V.
+2. Titik tengah dua resistor terhadap OUT-/GND harus ~setengahnya, misalnya ~1.95V.
+3. Baru hubungkan titik tengah ke GPIO4.
 
-## Power saat pengujian awal
+## Power saat pengujian
 
-Cara paling sederhana:
-1. ESP32-C3 tetap diberi daya dari USB PC.
-2. Baterai tetap terhubung ke charger/protection board.
-3. Sambungkan OUT- charger ke GND ESP32.
-4. Sambungkan OUT+ melalui divider 10k/10k ke GPIO4.
-
-Ground harus common agar pembacaan ADC punya referensi yang sama.
+1. ESP32-C3 boleh tetap diberi daya dari USB PC.
+2. Baterai tersambung ke charger/protection board.
+3. OUT- charger harus common dengan GND ESP32.
+4. Titik tengah 10k/10k masuk GPIO4.
 
 ## ADC
 
@@ -55,50 +54,47 @@ Firmware menggunakan:
 - analogReadMilliVolts()
 - averaging 32 sampel
 
-## Kalibrasi
+ESP32-C3 ADC pada attenuasi tinggi tetap mempunyai batas rentang ukur. Jika input terlalu tinggi, pembacaan dapat saturasi dan angka hasil perkalian divider menjadi tidak masuk akal.
 
-Setelah sketch berjalan, bandingkan tegangan di OLED dengan multimeter.
+## Kasus nyata project: 6.027V
 
-Contoh:
-- multimeter = 3.90 V
-- OLED = 3.84 V
-
-Hitung:
+Saat serial menampilkan:
 
 ```text
-CALIBRATION = 3.90 / 3.84
-            = 1.0156
+Battery: 6.027 V | 100%
 ```
 
-Lalu ubah di firmware:
+angka tersebut bukan tegangan baterai sebenarnya. Nilai itu berarti ADC sekitar 3.013V kemudian dikalikan rasio 2.0. Ini indikator kuat bahwa divider salah / tidak lengkap / input ADC over-range.
+
+Gunakan `02b_adc_diagnostic.ino` sebelum melanjutkan.
+
+## Kalibrasi
+
+Setelah wiring benar dan hasil berada sekitar 3.3-4.2V, bandingkan dengan multimeter.
+
+Contoh:
+- multimeter = 3.90V
+- OLED = 3.84V
+
+```text
+CALIBRATION = 3.90 / 3.84 = 1.0156
+```
+
+Lalu ubah:
 
 ```cpp
 const float CALIBRATION = 1.0156f;
 ```
 
-## Persentase baterai
+## Persentase
 
-Persentase dibuat dari tabel kurva tegangan Li-ion 1S, bukan rumus linear sederhana.
-
-Catatan:
-- saat charging, tegangan terlihat lebih tinggi
-- saat beban besar, tegangan dapat turun sementara
-- karena itu persen masih merupakan estimasi
-
-Untuk akurasi tingkat lanjut nanti bisa ditambah fuel gauge seperti MAX17048.
-
-## Target tampilan
-
-```text
-BATTERY        65%
-[████████----] 3.91V
-```
+Persentase adalah estimasi berdasarkan kurva tegangan Li-ion 1S. Saat charging atau beban besar, angka dapat berubah sementara.
 
 ## Tahap selanjutnya
 
-Setelah voltage + percentage stabil:
-1. deteksi status charging,
-2. animasi charge,
-3. low battery warning,
-4. auto sleep OLED,
+Setelah tegangan stabil:
+1. charging detection,
+2. charging animation,
+3. low-battery warning,
+4. OLED auto sleep,
 5. power optimization.
