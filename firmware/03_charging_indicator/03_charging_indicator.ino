@@ -11,15 +11,13 @@
 #define OLED_RESET -1
 #define OLED_ADDRESS 0x3C
 
-// Divider baterai: 10k atas + 10k bawah.
 const float DIVIDER_RATIO = 2.0f;
-
-// Kalibrasi setelah dibandingkan dengan multimeter.
 const float CALIBRATION = 1.0000f;
 
-// Untuk test animasi OLED tanpa menunggu deteksi charging,
-// ubah menjadi true. Setelah test, kembalikan false.
 const bool FORCE_CHARGING_ANIMATION = false;
+
+const float BATTERY_MIN_VALID = 2.50f;
+const float BATTERY_MAX_VALID = 4.35f;
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
@@ -28,10 +26,10 @@ float compareVoltage = 0.0f;
 unsigned long lastCompareMs = 0;
 unsigned long chargingHoldUntil = 0;
 
-const unsigned long COMPARE_INTERVAL_MS = 10000; // bandingkan tiap 10 detik
-const unsigned long CHARGING_HOLD_MS = 90000;    // tahan status CHG 90 detik
-const float CHARGE_RISE_THRESHOLD = 0.010f;      // kenaikan 10 mV
-const float DROP_CANCEL_THRESHOLD = 0.025f;      // turun 25 mV -> cancel CHG
+const unsigned long COMPARE_INTERVAL_MS = 10000;
+const unsigned long CHARGING_HOLD_MS = 90000;
+const float CHARGE_RISE_THRESHOLD = 0.010f;
+const float DROP_CANCEL_THRESHOLD = 0.025f;
 
 float readBatteryVoltage() {
   const int samples = 32;
@@ -82,7 +80,6 @@ bool updateChargingDetection(float voltage) {
 
   unsigned long now = millis();
 
-  // EMA agar noise ADC tidak terlalu mudah memicu charging.
   if (filteredVoltage <= 0.1f) {
     filteredVoltage = voltage;
     compareVoltage = voltage;
@@ -104,7 +101,6 @@ bool updateChargingDetection(float voltage) {
 
     compareVoltage = filteredVoltage;
     lastCompareMs = now;
-
     Serial.printf("Trend: %.3f V | delta=%+.3f V\n", filteredVoltage, delta);
   }
 
@@ -134,6 +130,32 @@ void drawChargingBattery(int x, int y, int w, int h) {
   display.fillRect(x + 2, y + 2, fillW, h - 4, SSD1306_WHITE);
 }
 
+void showSensorError(float voltage) {
+  display.clearDisplay();
+  display.setTextColor(SSD1306_WHITE);
+  display.setTextSize(1);
+  display.setCursor(0, 0);
+  display.println("CHECK BAT SENSE");
+  display.setCursor(0, 12);
+  display.print("READ: ");
+  display.print(voltage, 2);
+  display.println("V");
+  display.setCursor(0, 23);
+  display.print("USE PRE-BOOST");
+  display.display();
+}
+
+void showNoBattery() {
+  display.clearDisplay();
+  display.setTextColor(SSD1306_WHITE);
+  display.setTextSize(1);
+  display.setCursor(20, 6);
+  display.println("NO BATTERY");
+  display.setCursor(12, 19);
+  display.println("CHECK B+/OUT+");
+  display.display();
+}
+
 void setup() {
   Serial.begin(115200);
 
@@ -158,6 +180,32 @@ void setup() {
 
 void loop() {
   float batteryVoltage = readBatteryVoltage();
+
+  if (batteryVoltage > BATTERY_MAX_VALID) {
+    chargingHoldUntil = 0;
+    filteredVoltage = 0.0f;
+
+    Serial.printf(
+      "SENSOR ERROR: %.3f V | Sense kemungkinan terhubung ke 5V boost/output\n",
+      batteryVoltage
+    );
+
+    showSensorError(batteryVoltage);
+    delay(500);
+    return;
+  }
+
+  if (batteryVoltage < BATTERY_MIN_VALID) {
+    chargingHoldUntil = 0;
+    filteredVoltage = 0.0f;
+
+    Serial.printf("NO BATTERY / LOW SENSE: %.3f V\n", batteryVoltage);
+
+    showNoBattery();
+    delay(500);
+    return;
+  }
+
   int percent = batteryPercent(batteryVoltage);
   bool charging = updateChargingDetection(batteryVoltage);
 
@@ -170,7 +218,6 @@ void loop() {
 
   display.clearDisplay();
   display.setTextColor(SSD1306_WHITE);
-
   display.setTextSize(1);
   display.setCursor(0, 0);
 
@@ -182,7 +229,6 @@ void loop() {
 
     drawChargingBattery(0, 11, 68, 14);
 
-    // Simbol sederhana karena font default tidak punya ikon petir Unicode.
     display.setCursor(75, 12);
     display.print(">>");
     display.setCursor(92, 12);
