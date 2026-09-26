@@ -5,7 +5,7 @@ Smart powerbank DIY berbasis **ESP32-C3 Mini** dengan OLED I2C, charger baterai 
 ## Status proyek
 **Tahap 1 selesai — OLED berhasil menyala dan berjalan.**
 
-**Arsitektur diperbarui:** proses charging baterai dipisahkan dari board powerbank utama dan akan memakai modul charger kecil **CSM40561** (nama modul berdasarkan penandaan yang dimiliki pengguna; pinout dan arus charge akan diverifikasi sebelum penyambungan permanen).
+**Tahap 2 — charger terpisah:** modul yang difoto cocok dengan board **CSM4056T / TP4056-style Type-C 1S dengan proteksi**, bukan sekadar charger tanpa proteksi. Nama awal project ditulis CSM40561, tetapi dokumentasi sekarang mencatat bentuk board dan fungsi terminal yang sudah teridentifikasi.
 
 Tanggal progress: 26 September 2026.
 
@@ -13,35 +13,47 @@ Tanggal progress: 26 September 2026.
 - ESP32-C3 Mini / SuperMini
 - OLED I2C 0.9/0.91 inch
 - Driver OLED: SSD1306
-- Resolusi yang dipakai saat test: 128x32
+- Resolusi test: 128x32
 - Alamat I2C: 0x3C
-- Modul charger baterai kecil: **CSM40561**
-- Board powerbank bekas bertuliskan `229-V8.2S 2021-3-30 3511` untuk sisi output/boost
+- Modul charger Type-C **CSM4056T / TP4056-style dengan protection**
+- Board powerbank bekas `229-V8.2S 2021-3-30 3511` untuk boost/output 5V
 - 2 x baterai Li-ion 4600 mAh
 - Konfigurasi baterai: 1S2P / paralel
 - Kapasitas nominal pack: sekitar 9200 mAh @ 3.7 V
 - Tegangan pack terukur: sekitar 3.9 V
 
-## Arsitektur daya terbaru
+## Arsitektur daya
 ```text
-5V INPUT CHARGER
-       |
-       v
-+----------------+
-| CSM40561       |
-| charger 1S     |
-+----------------+
-       |
-       v
- BATTERY PACK 1S2P
- 2 x 4600 mAh
-       |
-       +------> ESP32-C3 + OLED
-       |
-       +------> BOARD POWERBANK / BOOST ---> USB 5V OUTPUT
+USB-C 5V
+   |
+   v
++-----------------------------+
+| CSM4056T / TP4056-style     |
+| charger + battery protection|
++-----------------------------+
+   | B+ / B-
+   v
+BATTERY PACK 1S2P
+2 x 4600 mAh
+   |
+   | protected path melalui OUT+ / OUT-
+   v
+BOARD POWERBANK / BOOST ---> USB 5V OUTPUT
+   |
+   +---> supply ESP32-C3 + OLED
 ```
 
-> Charger baterai dan boost/output sekarang diperlakukan sebagai dua blok terpisah.
+### Terminal charger
+Dengan **USB-C berada di bawah** dan sisi komponen menghadap ke atas, empat pad di sisi atas dibaca dari kiri ke kanan:
+
+```text
+OUT+   B+   B-   OUT-
+```
+
+- `B+` / `B-`: hanya untuk battery pack 1S2P.
+- `OUT+` / `OUT-`: menuju beban/board powerbank agar proteksi over-discharge, over-current, dan short-circuit tetap berada di jalur.
+- USB-C: input charger 5V.
+- Pad `IN+` / `IN-` di dekat USB-C adalah alternatif input 5V dan tidak perlu dipakai jika menggunakan USB-C.
 
 ## Wiring OLED yang sudah dites
 | OLED | ESP32-C3 Mini |
@@ -68,15 +80,15 @@ Library:
 - Low battery warning
 - OLED auto sleep
 - ESP32 low-power mode
-- Fitur tambahan akan ditambahkan bertahap
 
 ## Progress
 - [x] ESP32-C3 board package terpasang
 - [x] ESP32-C3 dapat di-upload
 - [x] OLED I2C tersambung
 - [x] OLED berhasil menampilkan teks
-- [x] Arsitektur charger dipisahkan dari boost/output
-- [ ] Verifikasi pinout dan arus charge modul CSM40561
+- [x] Charger dipisahkan dari boost/output
+- [x] Board charger Type-C dengan B+/B-/OUT+/OUT- teridentifikasi
+- [ ] Uji charger dengan multimeter
 - [ ] Pembacaan tegangan baterai
 - [ ] Persentase baterai
 - [ ] Status charging
@@ -84,14 +96,8 @@ Library:
 - [ ] Optimasi konsumsi daya
 - [ ] Final assembly
 
-## Struktur repository
-- `firmware/` — kode Arduino per tahap
-- `docs/` — wiring, tutorial, dan troubleshooting
-- `hardware/` — catatan pinout dan hardware
-
 ## Safety
-Jangan sambungkan baterai Li-ion langsung ke pin ADC ESP32-C3. Pembacaan tegangan baterai nanti menggunakan resistor divider.
-
-Dua sel yang dipasang paralel harus memiliki tegangan yang sangat dekat sebelum disatukan.
-
-Sebelum modul CSM40561 dihubungkan permanen, cek label/pin pada PCB, tegangan input, tegangan terminasi, dan arus charging aktual. Nama keluarga IC 40561 dipakai oleh beberapa vendor dengan spesifikasi yang tidak selalu sama.
+- Pack tetap **1S2P**. Jangan dibuat seri.
+- Jangan sambungkan baterai langsung ke ADC ESP32-C3; gunakan resistor divider.
+- Jangan mengambil beban dari `B+` / `B-`; gunakan `OUT+` / `OUT-` supaya proteksi charger tetap efektif.
+- Modul ini bukan power-path/load-sharing controller. Untuk pengujian awal, hindari charging sambil menarik beban besar dari output.
